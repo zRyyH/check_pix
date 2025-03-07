@@ -1,7 +1,7 @@
 from fastapi import APIRouter, HTTPException, UploadFile, File
 from utils import write_extratos, write_comprovantes
 from core.manager import Manager
-from typing import List
+from typing import List, Optional
 
 
 Core = Manager()
@@ -11,10 +11,10 @@ router = APIRouter()
 @router.post("/carregar", summary="Carregar dados (comprovantes e extratos)")
 async def carregar(
     comprovantes: List[UploadFile] = File(...),
-    corpx: UploadFile = File(...),
-    itau: UploadFile = File(...),
-    digital: UploadFile = File(...),
-    generico: UploadFile = File(...),
+    corpx: Optional[UploadFile] = File(None),
+    itau: Optional[UploadFile] = File(None),
+    digital: Optional[UploadFile] = File(None),
+    generico: Optional[UploadFile] = File(None),
 ):
     try:
         extratos = await write_extratos(corpx, itau, digital, generico)

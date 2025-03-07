@@ -19,31 +19,31 @@ def processar_transferencias(corpx="", itau="", digital="", generico=""):
     transfers = []
 
     if corpx:
+        print(corpx)
         corpx_content = extract_content(corpx)
         corpx_tranfers = format_for_corpx(corpx_content)
         transfers.extend(corpx_tranfers)
 
     if itau:
+        print(itau)
         itau_content = extract_content(itau)
         itau_tranfers = format_for_itau(itau_content)
         transfers.extend(itau_tranfers)
 
     if digital:
+        print(digital)
         digital_content = extract_content(digital)
         digital_tranfers = format_for_digital(digital_content)
         transfers.extend(digital_tranfers)
 
     if generico:
+        print(generico)
         generic_content = extract_content(generico)
         generic_tranfers = format_for_generic(generic_content)
         transfers.extend(generic_tranfers)
 
-    log = "Transferências extraídas dos extratos: Corpx: {} | Itaú: {} | Digital: {} | Genérico: {}".format(
-        len(corpx_tranfers),
-        len(itau_tranfers),
-        len(digital_tranfers),
-        len(generic_tranfers),
-    )
+    log = "Transferências extraídas dos extratos: {}".format(transfers)
+    
     info(log)
 
     return transfers
@@ -60,7 +60,14 @@ def processar_comprovante(path_image):
     Retorne nesse formato:
     {"nome": "Fulano de Tal", "valor": 100.0, "data": "01/01/2025"}
     """
-    comprovante_content = extract_text(path_image)["textAnnotations"][0]["description"]
+
+    if path_image.split(".")[-1] != "pdf":
+        comprovante_content = extract_text(path_image)["textAnnotations"][0][
+            "description"
+        ]
+    else:
+        comprovante_content = extract_content(path_image)
+
     dados_comprovante = ai_processor(SYSTEM_MESSAGE_AI, comprovante_content)
     info(f"Comprovante processado com OpenAI. Informações obtidas: {dados_comprovante}")
     return dados_comprovante

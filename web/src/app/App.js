@@ -14,6 +14,33 @@ function App() {
   const [responseData, setResponseData] = useState(null);
   const [isLoading, setIsLoading] = useState(false);
 
+  // Remove quebras de linha e garante que o valor seja string
+  const sanitize = (value) => {
+    if (value == null) return "";
+    if (typeof value !== 'string') value = String(value);
+    return value.replace(/(\r\n|\n|\r)/gm, ' ');
+  };
+
+  // Função que unifica comprovantes e transferências em pares
+  const mergeComprovantesTransferencias = (comprovanteObj, transferenciaObj) => {
+    const comprovantes = Object.values(comprovanteObj || {});
+    let transferencias = [];
+    if (transferenciaObj && typeof transferenciaObj === 'object') {
+      transferencias = Object.values(transferenciaObj).filter(
+        (val) => val && typeof val === 'object'
+      );
+    }
+    const maxLen = Math.max(comprovantes.length, transferencias.length);
+    const merged = [];
+    for (let i = 0; i < maxLen; i++) {
+      merged.push({
+        comprovante: comprovantes[i] || {},
+        transferencia: transferencias[i] || {},
+      });
+    }
+    return merged;
+  };
+
   const handleFileChange = (e, key) => {
     const file = e.target.files[0];
     setFiles((prev) => ({ ...prev, [key]: file }));
@@ -30,21 +57,16 @@ function App() {
       alert("Você deve selecionar pelo menos 1 comprovante.");
       return;
     }
-    if (!files.corpx || !files.digital || !files.itau || !files.generico) {
-      alert("Você deve selecionar todos os arquivos individuais: corpx, digital, itau e generico.");
-      return;
-    }
-
     const formData = new FormData();
     multipleFiles.forEach((file) => formData.append("comprovantes", file));
-    formData.append("corpx", files.corpx);
-    formData.append("digital", files.digital);
-    formData.append("itau", files.itau);
-    formData.append("generico", files.generico);
+    if (files.corpx) formData.append("corpx", files.corpx);
+    if (files.itau) formData.append("itau", files.itau);
+    if (files.digital) formData.append("digital", files.digital);
+    if (files.generico) formData.append("generico", files.generico);
 
     try {
       setIsLoading(true);
-      const response = await fetch('http://localhost:8000/carregar', {
+      const response = await fetch('http://192.168.3.250:8000/carregar', {
         method: 'POST',
         body: formData,
       });
@@ -59,7 +81,7 @@ function App() {
     }
   };
 
-  // Função para gerar o PDF com os dados de resposta
+  // Gera PDF unindo comprovante + transferência no mesmo bloco e removendo a coluna "Registro"
   const handleGeneratePDF = () => {
     if (!responseData) {
       alert("Sem dados para gerar relatório.");
@@ -71,43 +93,25 @@ function App() {
     doc.setFontSize(12);
     let startY = 32;
 
-    // Função auxiliar para montar dados da tabela
     const buildTableData = (registros) => {
       const tableData = [];
-      registros.forEach((item, index) => {
-        const reg = `Registro ${index + 1}`;
-        // Processa comprovante
-        Object.entries(item.comprovante).forEach(([id, data]) => {
+      registros.forEach((item) => {
+        const pairs = mergeComprovantesTransferencias(
+          item.comprovante,
+          item.transferencia
+        );
+        pairs.forEach(({ comprovante, transferencia }) => {
           tableData.push([
-            reg,
-            "Comprovante",
-            id,
-            data.nome,
-            data.valor,
-            data.data,
-            data.banco,
+            sanitize(comprovante.nome),
+            sanitize(comprovante.valor),
+            sanitize(comprovante.data),
+            sanitize(comprovante.banco),
+            sanitize(transferencia.nome),
+            sanitize(transferencia.valor),
+            sanitize(transferencia.data),
+            sanitize(transferencia.banco),
           ]);
         });
-        // Processa transferência
-        if (typeof item.transferencia === 'object') {
-          Object.entries(item.transferencia).forEach(([key, value]) => {
-            if (typeof value === 'object') {
-              tableData.push([
-                reg,
-                "Transferência",
-                key,
-                value.nome,
-                value.valor,
-                value.data,
-                value.banco,
-              ]);
-            } else {
-              tableData.push([reg, "Transferência", key, value, "", "", ""]);
-            }
-          });
-        } else {
-          tableData.push([reg, "Transferência", "", item.transferencia, "", "", ""]);
-        }
       });
       return tableData;
     };
@@ -115,11 +119,21 @@ function App() {
     const validData = buildTableData(responseData.validos || []);
     const invalidData = buildTableData(responseData.invalidos || []);
 
-    // Adiciona tabela de registros válidos
+    const tableHeaders = [[
+      'Comp. Nome',
+      'Comp. Valor',
+      'Comp. Data',
+      'Comp. Banco',
+      'Transf. Nome',
+      'Transf. Valor',
+      'Transf. Data',
+      'Transf. Banco'
+    ]];
+
     if (validData.length > 0) {
       doc.text("Válidos", 14, startY);
       autoTable(doc, {
-        head: [['Registro', 'Tipo', 'ID', 'Nome', 'Valor', 'Data', 'Banco']],
+        head: tableHeaders,
         body: validData,
         startY: startY + 4,
         theme: 'grid',
@@ -127,11 +141,10 @@ function App() {
       });
       startY = doc.lastAutoTable.finalY + 10;
     }
-    // Adiciona tabela de registros inválidos
     if (invalidData.length > 0) {
       doc.text("Inválidos", 14, startY);
       autoTable(doc, {
-        head: [['Registro', 'Tipo', 'ID', 'Nome', 'Valor', 'Data', 'Banco']],
+        head: tableHeaders,
         body: invalidData,
         startY: startY + 4,
         theme: 'grid',
@@ -141,191 +154,171 @@ function App() {
     doc.save("relatorio.pdf");
   };
 
-  // Função auxiliar para renderizar um campo com label e valor
+  // Exibe um label + valor (com sanitização)
   const renderDetail = (label, value) => (
     <div className={styles.detailRow}>
       <span className={styles.detailLabel}>{label}:</span>
-      <span className={styles.detailValue}>{value}</span>
+      <span className={styles.detailValue}>{sanitize(value)}</span>
     </div>
   );
 
-  // Renderiza os resultados em layout vertical e minimalista
-  const renderResults = () => (
-    <div className={styles.resultsContainer}>
-      {responseData.validos && responseData.validos.length > 0 && (
-        <div className={styles.resultsSection}>
-          <h3>Válidos</h3>
-          {responseData.validos.map((item, index) => (
+  // Renderiza os resultados na tela, separando Comprovante e Transferência
+  const renderResults = (registros) => {
+    return (
+      <>
+        {registros.map((item, index) => {
+          const pairs = mergeComprovantesTransferencias(
+            item.comprovante,
+            item.transferencia
+          );
+          return (
             <div key={index} className={styles.resultCard}>
               <h4>Registro {index + 1}</h4>
-              <div className={styles.section}>
-                <h5>Comprovante</h5>
-                {Object.entries(item.comprovante).map(([id, data]) => (
-                  <div key={id} className={styles.detailCard}>
-                    {renderDetail("ID", id)}
-                    {renderDetail("Nome", data.nome)}
-                    {renderDetail("Valor", data.valor)}
-                    {renderDetail("Data", data.data)}
-                    {renderDetail("Banco", data.banco)}
+              {pairs.map((pair, i) => {
+                const { comprovante, transferencia } = pair;
+                const transferFound = transferencia && transferencia.nome && transferencia.nome.trim() !== "";
+                return (
+                  <div
+                    key={i}
+                    className={`${styles.detailCard} ${transferFound ? styles.transferFound : styles.transferNotFound}`}
+                  >
+                    <h5>Comprovante</h5>
+                    {renderDetail("Comp. Nome", comprovante.nome)}
+                    {renderDetail("Comp. Valor", comprovante.valor)}
+                    {renderDetail("Comp. Data", comprovante.data)}
+                    {renderDetail("Comp. Banco", comprovante.banco)}
+
+                    <hr className={styles.separator} />
+
+                    <h5>Transferência</h5>
+                    {renderDetail("Transf. Nome", transferencia.nome)}
+                    {renderDetail("Transf. Valor", transferencia.valor)}
+                    {renderDetail("Transf. Data", transferencia.data)}
+                    {renderDetail("Transf. Banco", transferencia.banco)}
                   </div>
-                ))}
-              </div>
-              <div className={styles.section}>
-                <h5>Transferência</h5>
-                {typeof item.transferencia === 'object'
-                  ? Object.entries(item.transferencia).map(([key, value]) =>
-                    typeof value === 'object' ? (
-                      <div key={key} className={styles.detailCard}>
-                        {renderDetail("ID", key)}
-                        {renderDetail("Nome", value.nome)}
-                        {renderDetail("Valor", value.valor)}
-                        {renderDetail("Data", value.data)}
-                        {renderDetail("Banco", value.banco)}
-                      </div>
-                    ) : (
-                      <div key={key} className={styles.detailCard}>
-                        {renderDetail(key, value)}
-                      </div>
-                    )
-                  )
-                  : <p>{item.transferencia}</p>}
-              </div>
+                );
+              })}
             </div>
-          ))}
-        </div>
-      )}
-      {responseData.invalidos && responseData.invalidos.length > 0 && (
-        <div className={styles.resultsSection}>
-          <h3>Inválidos</h3>
-          {responseData.invalidos.map((item, index) => (
-            <div key={index} className={styles.resultCard}>
-              <h4>Registro {index + 1}</h4>
-              <div className={styles.section}>
-                <h5>Comprovante</h5>
-                {Object.entries(item.comprovante).map(([id, data]) => (
-                  <div key={id} className={styles.detailCard}>
-                    {renderDetail("ID", id)}
-                    {renderDetail("Nome", data.nome)}
-                    {renderDetail("Valor", data.valor)}
-                    {renderDetail("Data", data.data)}
-                    {renderDetail("Banco", data.banco)}
-                  </div>
-                ))}
-              </div>
-              <div className={styles.section}>
-                <h5>Transferência</h5>
-                {typeof item.transferencia === 'object'
-                  ? Object.entries(item.transferencia).map(([key, value]) =>
-                    typeof value === 'object' ? (
-                      <div key={key} className={styles.detailCard}>
-                        {renderDetail("ID", key)}
-                        {renderDetail("Nome", value.nome)}
-                        {renderDetail("Valor", value.valor)}
-                        {renderDetail("Data", value.data)}
-                        {renderDetail("Banco", value.banco)}
-                      </div>
-                    ) : (
-                      <div key={key} className={styles.detailCard}>
-                        {renderDetail(key, value)}
-                      </div>
-                    )
-                  )
-                  : <p>{item.transferencia}</p>}
-              </div>
-            </div>
-          ))}
-        </div>
-      )}
-    </div>
-  );
+          );
+        })}
+      </>
+    );
+  };
 
   return (
     <div className={styles.mainWrapper}>
+      {isLoading && (
+        <div className={styles.modalOverlay}>
+          <div className={styles.modalContent}>
+            Carregando...
+          </div>
+        </div>
+      )}
       <div className={styles.container}>
         <header className={styles.header}>
-          <h1 className={styles.animateItem}>Upload Premium Arquivos</h1>
+          <h1 className={`${styles.animateItem}`}>Analisar transferencias Pix</h1>
+          <p className={`${styles.subtitle} ${styles.animateItem}`}>
+            Selecione seus comprovantes e extratos para uma análise.
+          </p>
         </header>
-        <div className={styles.flexContainer}>
-          {/* Coluna de Upload */}
-          <div className={styles.uploadColumn}>
-            <section className={`${styles.card} ${styles.animateItem}`}>
-              <h2>Arquivos Individuais</h2>
-              <div className={styles.inputGroup}>
-                <label htmlFor="corpx">Corpx</label>
+        <form className={styles.premiumForm} onSubmit={handleSubmit}>
+          <div className={styles.flexContainer}>
+            <div className={styles.uploadColumn}>
+              <section className={`${styles.card} ${styles.animateItem}`}>
+                <h2>Arquivos Individuais</h2>
+                <div className={styles.inputGroup}>
+                  <label>Corpx (opcional)</label>
+                  <label htmlFor="corpx" className={`${styles.customFileButton} ${styles.animateItem}`}>Escolher arquivo</label>
+                  <input
+                    id="corpx"
+                    type="file"
+                    onChange={(e) => handleFileChange(e, 'corpx')}
+                    accept="*"
+                    className={styles.hiddenFileInput}
+                  />
+                  {files.corpx && <span className={styles.fileName}>{files.corpx.name}</span>}
+                </div>
+                <div className={styles.inputGroup}>
+                  <label>Itau (opcional)</label>
+                  <label htmlFor="itau" className={`${styles.customFileButton} ${styles.animateItem}`}>Escolher arquivo</label>
+                  <input
+                    id="itau"
+                    type="file"
+                    onChange={(e) => handleFileChange(e, 'itau')}
+                    accept="*"
+                    className={styles.hiddenFileInput}
+                  />
+                  {files.itau && <span className={styles.fileName}>{files.itau.name}</span>}
+                </div>
+                <div className={styles.inputGroup}>
+                  <label>Digital (opcional)</label>
+                  <label htmlFor="digital" className={`${styles.customFileButton} ${styles.animateItem}`}>Escolher arquivo</label>
+                  <input
+                    id="digital"
+                    type="file"
+                    onChange={(e) => handleFileChange(e, 'digital')}
+                    accept="*"
+                    className={styles.hiddenFileInput}
+                  />
+                  {files.digital && <span className={styles.fileName}>{files.digital.name}</span>}
+                </div>
+                <div className={styles.inputGroup}>
+                  <label>Generico (opcional)</label>
+                  <label htmlFor="generico" className={`${styles.customFileButton} ${styles.animateItem}`}>Escolher arquivo</label>
+                  <input
+                    id="generico"
+                    type="file"
+                    onChange={(e) => handleFileChange(e, 'generico')}
+                    accept="*"
+                    className={styles.hiddenFileInput}
+                  />
+                  {files.generico && <span className={styles.fileName}>{files.generico.name}</span>}
+                </div>
+              </section>
+              <section className={`${styles.card} ${styles.cardComprovantes} ${styles.animateItem}`}>
+                <h2>Comprovantes</h2>
+                <label htmlFor="comprovantes" className={`${styles.customFileButton} ${styles.animateItem}`}>Escolher arquivos</label>
                 <input
-                  id="corpx"
                   type="file"
-                  onChange={(e) => handleFileChange(e, 'corpx')}
+                  multiple
+                  id="comprovantes"
+                  onChange={handleMultipleFilesChange}
                   accept="*"
+                  className={styles.hiddenFileInput}
                 />
-                {files.corpx && <span className={styles.fileName}>{files.corpx.name}</span>}
-              </div>
-              <div className={styles.inputGroup}>
-                <label htmlFor="itau">Itau</label>
-                <input
-                  id="itau"
-                  type="file"
-                  onChange={(e) => handleFileChange(e, 'itau')}
-                  accept="*"
-                />
-                {files.itau && <span className={styles.fileName}>{files.itau.name}</span>}
-              </div>
-              <div className={styles.inputGroup}>
-                <label htmlFor="digital">Digital</label>
-                <input
-                  id="digital"
-                  type="file"
-                  onChange={(e) => handleFileChange(e, 'digital')}
-                  accept="*"
-                />
-                {files.digital && <span className={styles.fileName}>{files.digital.name}</span>}
-              </div>
-              <div className={styles.inputGroup}>
-                <label htmlFor="generico">Generico</label>
-                <input
-                  id="generico"
-                  type="file"
-                  onChange={(e) => handleFileChange(e, 'generico')}
-                  accept="*"
-                />
-                {files.generico && <span className={styles.fileName}>{files.generico.name}</span>}
-              </div>
-            </section>
-            <section className={`${styles.card} ${styles.cardComprovantes} ${styles.animateItem}`}>
-              <h2>Comprovantes</h2>
-              <input
-                type="file"
-                multiple
-                onChange={handleMultipleFilesChange}
-                accept="*"
-              />
-              <div className={styles.fileList}>
-                {multipleFiles.map((file, index) => (
-                  <div key={index} className={`${styles.fileItem} ${styles.animateItem}`}>
-                    {file.name}
-                  </div>
-                ))}
-              </div>
-            </section>
-          </div>
-
-          {/* Coluna de Resultados */}
-          <div className={styles.resultColumn}>
-            <button
-              type="button"
-              className={`${styles.submitButton} ${styles.animateItem}`}
-              onClick={handleSubmit}
-            >
-              Enviar
-            </button>
-            {isLoading && (
-              <div className={`${styles.loadingIndicator} ${styles.animateItem}`}>
-                Carregando...
-              </div>
-            )}
-            {responseData && (
-              <div className={`${styles.responseSection} ${styles.animateItem}`}>
-                {renderResults()}
+                <div className={styles.fileList}>
+                  {multipleFiles.map((file, index) => (
+                    <div key={index} className={`${styles.fileItem} ${styles.animateItem}`}>
+                      {file.name}
+                    </div>
+                  ))}
+                </div>
+              </section>
+            </div>
+            <div className={styles.resultColumn}>
+              {responseData && (
+                <div className={`${styles.responseSection} ${styles.animateItem}`}>
+                  {responseData.validos && responseData.validos.length > 0 && (
+                    <div className={styles.resultsSection}>
+                      <h3>Válidos</h3>
+                      {renderResults(responseData.validos)}
+                    </div>
+                  )}
+                  {responseData.invalidos && responseData.invalidos.length > 0 && (
+                    <div className={styles.resultsSection}>
+                      <h3>Inválidos</h3>
+                      {renderResults(responseData.invalidos)}
+                    </div>
+                  )}
+                </div>
+              )}
+              <div className={styles.buttonGroup}>
+                <button
+                  type="submit"
+                  className={`${styles.submitButton} ${styles.animateItem}`}
+                >
+                  Enviar Arquivos
+                </button>
                 <button
                   type="button"
                   className={`${styles.submitButton} ${styles.animateItem}`}
@@ -334,9 +327,9 @@ function App() {
                   Gerar Relatório PDF
                 </button>
               </div>
-            )}
+            </div>
           </div>
-        </div>
+        </form>
       </div>
     </div>
   );

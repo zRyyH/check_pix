@@ -6,6 +6,9 @@ async def write_extratos(corpx, itau, digital, generico):
     extratos = {}
 
     for arquivo in [corpx, itau, digital, generico]:
+        if not arquivo:
+            continue
+        
         id = uuid.uuid4()
         data = datetime.now().strftime("%d-%m-%Y")
         ext = arquivo.filename.split(".")[-1]
