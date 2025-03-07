@@ -1,1 +1,3 @@
-"# check_pix" 
+.ENV
+
+SECRET_KEY="SECRET_KEY"
