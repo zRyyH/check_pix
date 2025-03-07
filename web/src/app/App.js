@@ -66,7 +66,7 @@ function App() {
 
     try {
       setIsLoading(true);
-      const response = await fetch('http://192.168.3.250:8000/carregar', {
+      const response = await fetch('https://checkpixapi.awpsoft.com.br/carregar', {
         method: 'POST',
         body: formData,
       });
