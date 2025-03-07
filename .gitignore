@@ -1,0 +1,10 @@
+# WEB
+/web/node_modules
+/web/build
+/web/.env
+
+# API
+/api/core/chave.json
+/api/core/.env
+/api/__pycache__
+/api/venv

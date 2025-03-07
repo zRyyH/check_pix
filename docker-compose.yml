@@ -1,0 +1,16 @@
+version: "3.8"
+
+services:
+  api:
+    build:
+      context: ./api
+    ports:
+      - "3001:8000"
+    restart: always
+
+  frontend:
+    build:
+      context: ./web
+    ports:
+      - "3000:80"
+    restart: always

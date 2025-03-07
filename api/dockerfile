@@ -1,0 +1,25 @@
+# Imagem base com Python 3.11 (versão slim para uma imagem mais leve)
+FROM python:3.11-slim
+
+# Impede a criação de arquivos .pyc e garante que a saída do Python seja enviada sem buffering
+ENV PYTHONDONTWRITEBYTECODE 1
+ENV PYTHONUNBUFFERED 1
+
+# Define o diretório de trabalho dentro do container
+WORKDIR /app
+
+# Atualiza o apt-get e instala dependências de compilação (necessárias para compilar alguns pacotes)
+RUN apt-get update && apt-get install -y build-essential && rm -rf /var/lib/apt/lists/*
+
+# Copia o arquivo de requisitos e instala as dependências do projeto
+COPY requirements.txt .
+RUN pip install --upgrade pip && pip install -r requirements.txt
+
+# Copia todos os arquivos do projeto para o diretório de trabalho
+COPY . .
+
+# Expõe a porta que a API utilizará
+EXPOSE 8000
+
+# Comando para iniciar a aplicação utilizando uvicorn
+CMD ["uvicorn", "api:app", "--host", "0.0.0.0", "--port", "8000"]
