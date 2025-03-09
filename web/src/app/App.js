@@ -21,6 +21,20 @@ function App() {
     return value.replace(/(\r\n|\n|\r)/gm, ' ');
   };
 
+  // Função para formatar os campos conforme as regras:
+  // Se campo for "nome" ou "data" e estiver vazio, retorna "Desconhecido".
+  // Se campo for "valor" e for 0, retorna "Desconhecido".
+  const formatField = (field, value) => {
+    const cleanedValue = sanitize(value);
+    if ((field === 'nome' || field === 'data') && cleanedValue.trim() === "") {
+      return "Desconhecido";
+    }
+    if (field === 'valor' && (cleanedValue.trim() === "0" || cleanedValue.trim() === "0.0")) {
+      return "Desconhecido";
+    }
+    return cleanedValue;
+  };
+
   // Função que unifica comprovantes e transferências em pares
   const mergeComprovantesTransferencias = (comprovanteObj, transferenciaObj) => {
     const comprovantes = Object.values(comprovanteObj || {});
@@ -81,19 +95,22 @@ function App() {
     }
   };
 
-  // Gera PDF unindo comprovante + transferência no mesmo bloco e removendo a coluna "Registro"
+  // Gera PDF unindo os dados dos registros.
+  // Relatório ajustado com letras menores e layout mais compacto.
   const handleGeneratePDF = () => {
     if (!responseData) {
       alert("Sem dados para gerar relatório.");
       return;
     }
     const doc = new jsPDF();
-    doc.setFontSize(18);
-    doc.text("Relatório de Validação", 14, 22);
-    doc.setFontSize(12);
-    let startY = 32;
+    // Título com fonte menor e posição ajustada
+    doc.setFontSize(14);
+    doc.text("Relatório de Validação", 14, 15);
+    // Define fonte menor para o restante do relatório
+    doc.setFontSize(8);
+    let startY = 22;
 
-    const buildTableData = (registros) => {
+    const buildTableData = (registros, isValid) => {
       const tableData = [];
       registros.forEach((item) => {
         const pairs = mergeComprovantesTransferencias(
@@ -101,69 +118,103 @@ function App() {
           item.transferencia
         );
         pairs.forEach(({ comprovante, transferencia }) => {
-          tableData.push([
-            sanitize(comprovante.nome),
-            sanitize(comprovante.valor),
-            sanitize(comprovante.data),
-            sanitize(comprovante.banco),
-            sanitize(transferencia.nome),
-            sanitize(transferencia.valor),
-            sanitize(transferencia.data),
-            sanitize(transferencia.banco),
-          ]);
+          if (isValid) {
+            tableData.push([
+              formatField('nome', comprovante.nome),
+              formatField('valor', comprovante.valor),
+              formatField('data', comprovante.data),
+              sanitize(comprovante.path),
+              formatField('nome', transferencia.nome),
+              formatField('valor', transferencia.valor),
+              formatField('data', transferencia.data),
+              sanitize(transferencia.banco)
+            ]);
+          } else {
+            tableData.push([
+              formatField('nome', comprovante.nome),
+              formatField('valor', comprovante.valor),
+              formatField('data', comprovante.data),
+              sanitize(comprovante.path)
+            ]);
+          }
         });
       });
       return tableData;
     };
 
-    const validData = buildTableData(responseData.validos || []);
-    const invalidData = buildTableData(responseData.invalidos || []);
+    const validData = buildTableData(responseData.validos || [], true);
+    const invalidData = buildTableData(responseData.invalidos || [], false);
 
-    const tableHeaders = [[
+    const validHeaders = [[
       'Comp. Nome',
       'Comp. Valor',
       'Comp. Data',
-      'Comp. Banco',
+      'Comp. Path',
       'Transf. Nome',
       'Transf. Valor',
       'Transf. Data',
       'Transf. Banco'
     ]];
 
+    const invalidHeaders = [[
+      'Comp. Nome',
+      'Comp. Valor',
+      'Comp. Data',
+      'Comp. Path'
+    ]];
+
     if (validData.length > 0) {
       doc.text("Válidos", 14, startY);
       autoTable(doc, {
-        head: tableHeaders,
+        head: validHeaders,
         body: validData,
-        startY: startY + 4,
+        startY: startY + 3,
         theme: 'grid',
-        headStyles: { fillColor: [74, 144, 226] },
+        headStyles: { fillColor: [74, 144, 226], fontSize: 8, cellPadding: 2 },
+        bodyStyles: { fontSize: 8, cellPadding: 2 },
+        styles: { fontSize: 8, cellPadding: 2 },
+        margin: { left: 14, right: 14 }
       });
-      startY = doc.lastAutoTable.finalY + 10;
+      startY = doc.lastAutoTable.finalY + 5;
     }
     if (invalidData.length > 0) {
       doc.text("Inválidos", 14, startY);
       autoTable(doc, {
-        head: tableHeaders,
+        head: invalidHeaders,
         body: invalidData,
-        startY: startY + 4,
+        startY: startY + 3,
         theme: 'grid',
-        headStyles: { fillColor: [74, 144, 226] },
+        headStyles: { fillColor: [74, 144, 226], fontSize: 8, cellPadding: 2 },
+        bodyStyles: { fontSize: 8, cellPadding: 2 },
+        styles: { fontSize: 8, cellPadding: 2 },
+        margin: { left: 14, right: 14 }
       });
     }
     doc.save("relatorio.pdf");
   };
 
-  // Exibe um label + valor (com sanitização)
-  const renderDetail = (label, value) => (
-    <div className={styles.detailRow}>
-      <span className={styles.detailLabel}>{label}:</span>
-      <span className={styles.detailValue}>{sanitize(value)}</span>
-    </div>
-  );
+  // Exibe um label + valor (com sanitização e formatação customizada)
+  const renderDetail = (label, value) => {
+    let formattedValue = sanitize(value);
+    if ((label.includes("Nome") || label.includes("Data")) && formattedValue.trim() === "") {
+      formattedValue = "Desconhecido";
+    }
+    if (label.includes("Valor") && (formattedValue.trim() === "0" || formattedValue.trim() === "0.0")) {
+      formattedValue = "Desconhecido";
+    }
+    return (
+      <div className={styles.detailRow}>
+        <span className={styles.detailLabel}>{label}:</span>
+        <span className={styles.detailValue}>{formattedValue}</span>
+      </div>
+    );
+  };
 
-  // Renderiza os resultados na tela, separando Comprovante e Transferência
-  const renderResults = (registros) => {
+  // Renderiza os resultados na tela.
+  // Para registros válidos, exibe tanto os dados do comprovante (sem o campo banco) quanto os da transferência.
+  // Para registros inválidos, exibe somente os dados do comprovante.
+  // A faixa à esquerda será verde para registros válidos e vermelha para inválidos.
+  const renderResults = (registros, isValid = true) => {
     return (
       <>
         {registros.map((item, index) => {
@@ -176,25 +227,26 @@ function App() {
               <h4>Registro {index + 1}</h4>
               {pairs.map((pair, i) => {
                 const { comprovante, transferencia } = pair;
-                const transferFound = transferencia && transferencia.nome && transferencia.nome.trim() !== "";
                 return (
                   <div
                     key={i}
-                    className={`${styles.detailCard} ${transferFound ? styles.transferFound : styles.transferNotFound}`}
+                    className={`${styles.detailCard} ${isValid ? styles.transferFound : styles.transferNotFound}`}
                   >
                     <h5>Comprovante</h5>
                     {renderDetail("Comp. Nome", comprovante.nome)}
                     {renderDetail("Comp. Valor", comprovante.valor)}
                     {renderDetail("Comp. Data", comprovante.data)}
-                    {renderDetail("Comp. Banco", comprovante.banco)}
-
-                    <hr className={styles.separator} />
-
-                    <h5>Transferência</h5>
-                    {renderDetail("Transf. Nome", transferencia.nome)}
-                    {renderDetail("Transf. Valor", transferencia.valor)}
-                    {renderDetail("Transf. Data", transferencia.data)}
-                    {renderDetail("Transf. Banco", transferencia.banco)}
+                    {renderDetail("Comp. Path", comprovante.path)}
+                    {isValid && (
+                      <>
+                        <hr className={styles.separator} />
+                        <h5>Transferência</h5>
+                        {renderDetail("Transf. Nome", transferencia.nome)}
+                        {renderDetail("Transf. Valor", transferencia.valor)}
+                        {renderDetail("Transf. Data", transferencia.data)}
+                        {renderDetail("Transf. Banco", transferencia.banco)}
+                      </>
+                    )}
                   </div>
                 );
               })}
@@ -301,13 +353,13 @@ function App() {
                   {responseData.validos && responseData.validos.length > 0 && (
                     <div className={styles.resultsSection}>
                       <h3>Válidos</h3>
-                      {renderResults(responseData.validos)}
+                      {renderResults(responseData.validos, true)}
                     </div>
                   )}
                   {responseData.invalidos && responseData.invalidos.length > 0 && (
                     <div className={styles.resultsSection}>
                       <h3>Inválidos</h3>
-                      {renderResults(responseData.invalidos)}
+                      {renderResults(responseData.invalidos, false)}
                     </div>
                   )}
                 </div>

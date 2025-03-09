@@ -1,9 +1,10 @@
 from core.wrappers import safe_execute
-from core.logger import info
+from core.logger import info, critical
 from dotenv import load_dotenv
 import openai
 import json
 import os
+import re
 
 # Carrega as variáveis do arquivo .env
 load_dotenv()
@@ -15,7 +16,6 @@ secret_key = os.getenv("SECRET_KEY")
 openai.api_key = secret_key
 
 
-@safe_execute
 def ai_processor(system_message, user_message):
     try:
         info("Iniciando processamento com AI.")
@@ -23,8 +23,7 @@ def ai_processor(system_message, user_message):
         messages = [
             {
                 "role": "system",
-                "content": "Não mande ```json ```, Sempre Responda Com JSON\n"
-                + system_message,
+                "content": "Sempre responda no formato JSON\n" + system_message,
             },
             {
                 "role": "user",
@@ -33,6 +32,7 @@ def ai_processor(system_message, user_message):
         ]
 
         info("Enviando requisição para a API do ChatGPT.")
+        
         # Chama a API do ChatGPT
         response = openai.ChatCompletion.create(
             model="gpt-4o-mini-2024-07-18",
@@ -42,6 +42,14 @@ def ai_processor(system_message, user_message):
 
         # Captura a resposta do modelo e converte a resposta JSON para dicionário Python
         res = response["choices"][0]["message"]["content"].strip()
+
+        # Removendo "json" do início e as aspas triplas
+        res = re.sub(r"```json\s+", "", res)
+
+        # Remove aspas triplas do início e fim
+        res = res.strip("```")
+
+        # Converte a resposta JSON para dicionário Python
         res_json = json.loads(res)
 
         # Loga um resumo da resposta (apenas as chaves)
@@ -49,9 +57,7 @@ def ai_processor(system_message, user_message):
         info("Processamento com AI concluído com sucesso.")
         return res_json
 
-    except json.JSONDecodeError as json_error:
-        raise (f"Erro ao decodificar JSON: {json_error}")
-    except openai.error.OpenAIError as api_error:
-        raise (f"Erro na API da OpenAI: {api_error}")
     except Exception as e:
-        raise (f"Erro inesperado: {e}")
+        print("Erro:", e)
+        critical(f"Erro ao processar com AI. Erro: {e}")
+        return {"nome": "", "valor": 0.0, "data": ""}

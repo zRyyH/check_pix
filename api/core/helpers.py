@@ -19,31 +19,27 @@ def processar_transferencias(corpx="", itau="", digital="", generico=""):
     transfers = []
 
     if corpx:
-        print(corpx)
         corpx_content = extract_content(corpx)
         corpx_tranfers = format_for_corpx(corpx_content)
         transfers.extend(corpx_tranfers)
 
     if itau:
-        print(itau)
         itau_content = extract_content(itau)
         itau_tranfers = format_for_itau(itau_content)
         transfers.extend(itau_tranfers)
 
     if digital:
-        print(digital)
         digital_content = extract_content(digital)
         digital_tranfers = format_for_digital(digital_content)
         transfers.extend(digital_tranfers)
 
     if generico:
-        print(generico)
         generic_content = extract_content(generico)
         generic_tranfers = format_for_generic(generic_content)
         transfers.extend(generic_tranfers)
 
     log = "Transferências extraídas dos extratos: {}".format(transfers)
-    
+
     info(log)
 
     return transfers
@@ -54,9 +50,10 @@ def processar_comprovante(path_image):
     """Obter informações do comprovante de transferência"""
     info(f"Iniciando processamento do comprovante: {path_image}")
     SYSTEM_MESSAGE_AI = """
-    Analise esse JSON do cloud vision e retorne um JSON com as informações da transferência.
-    Caso não ache o nome de quem enviou, retorne "nome": "".
-    Caso ache o nome de quem enviou, retorne "nome": "Fulano de Tal".
+    Analise esse JSON do google cloud vision e retorne um JSON com as informações da transferência.
+    Caso não ache o nome de quem enviou, retorne "nome": ""
+    Caso não ache o valor enviado, retorne "valor": 0
+    Caso não ache a data da transferencia, retorne "data": ""
     Retorne nesse formato:
     {"nome": "Fulano de Tal", "valor": 100.0, "data": "01/01/2025"}
     """
@@ -76,6 +73,7 @@ def processar_comprovante(path_image):
 @safe_execute
 def validar_comprovante(comprovante, transfer):
     """Validar comprovante com transferência"""
+
     c_nome, c_valor, c_data = (
         comprovante["nome"],
         comprovante["valor"],
@@ -113,6 +111,8 @@ def validar_transferencia(comprovante, transfers):
     info(
         f"Transferência estimada: {melhor_transferencia} para o comprovante: {comprovante}"
     )
+
+    print(comprovante, melhor_transferencia)
 
     if len(melhor_transferencia.keys()) > 1:
         return melhor_transferencia

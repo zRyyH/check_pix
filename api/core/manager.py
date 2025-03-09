@@ -46,31 +46,8 @@ class Manager:
         }
 
         return transferencias
-    
+
     def clear(self):
         self.CHECKER.clear()
         self.transferencias_aprovadas = []
         self.transferencias_rejeitadas = []
-
-
-# ManagerA = Manager()
-
-# ManagerA.carregar(
-#     image_paths=[
-#         "transfers/img (1).jpg",
-#         "transfers/img (2).jpg",
-#         "transfers/img (3).jpg",
-#         "transfers/img (4).jpg",
-#         "transfers/img (5).jpg",
-#         "transfers/img (6).jpg",
-#         "transfers/img (7).jpg",
-#     ],
-#     path_itau="extratos/extrato_itau.pdf",
-#     path_corpx="extratos/extrato_corpx.pdf",
-#     path_digital="extratos/extrato_digital.xlsx",
-#     path_generic="extratos/extrato_generic.xlsx",
-# )
-
-# ManagerA.validar()
-
-# ManagerA.relatorio()

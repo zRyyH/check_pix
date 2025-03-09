@@ -44,10 +44,16 @@ class Checker:
             self.comprovantes.clear()
 
         for path_image in image_paths:
-            info(f"Iniciando processamento do comprovante: {path_image}")
+            realname = path_image["realname"]
+            filename = path_image["filename"]
+
+            info(f"Iniciando processamento do comprovante: {realname}")
 
             # Processar comprovante com IA
-            comprovante = processar_comprovante(path_image=path_image)
+            comprovante = processar_comprovante(path_image=filename)
+
+            # Adicionar caminho do comprovante
+            comprovante.update({"path": realname})
 
             # Adicionar comprovante à lista de comprovantes locais
             local_comprovanes.append(comprovante)
@@ -77,12 +83,12 @@ class Checker:
                     {"comprovante": {id: comprovante}, "transferencia": transferencia}
                 )
             else:
-                comprovante.update({"banco": "Não encontrado!"})
+                comprovante.update({"banco": "Desconhecido"})
                 # Adicionar transferência inválida à lista de transferências inválidas
                 self.comprovantes_invalidos.append(
                     {
                         "comprovante": {id: comprovante},
-                        "transferencia": "Não encontrada!",
+                        "transferencia": "Desconhecido",
                     }
                 )
 
